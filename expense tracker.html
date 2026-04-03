@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Professional Expense Tracker | Secure</title>
+    
+    <!-- Libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        :root {
+            --primary: #1e3a8a; --success: #16a34a; --danger: #dc2626;
+            --bg: #f8fafc; --card: #ffffff; --text: #1e293b;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', -apple-system, sans-serif; }
+        body { background: var(--bg); color: var(--text); padding: 15px; line-height: 1.6; }
+
+        .container { max-width: 1100px; margin: 0 auto; }
+
+        /* Editable Header */
+        .header-section { 
+            text-align: center; margin-bottom: 30px; padding: 20px; 
+            background: white; border-radius: 15px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
+        }
+        .app-title-container { display: flex; align-items: center; justify-content: center; gap: 15px; }
+        .app-title { font-size: 28px; font-weight: 800; color: var(--primary); text-transform: uppercase; }
+        .edit-btn { color: #94a3b8; cursor: pointer; font-size: 18px; transition: 0.3s; }
+        .edit-btn:hover { color: var(--primary); }
+
+        /* Dashboard */
+        .stats-grid { 
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); 
+            gap: 20px; margin-bottom: 25px; 
+        }
+        .stat-card {
+            background: var(--card); padding: 25px; border-radius: 16px;
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .stat-card.balance { background: var(--primary); color: white; }
+        .stat-val { font-size: 1.8rem; font-weight: 800; }
+
+        /* Filters */
+        .filter-bar {
+            background: white; padding: 20px; border-radius: 12px;
+            margin-bottom: 25px; display: flex; flex-wrap: wrap; gap: 15px;
+            align-items: flex-end; box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+        .filter-group { display: flex; flex-direction: column; gap: 5px; flex: 1; min-width: 150px; }
+        .filter-group label { font-size: 12px; font-weight: 700; color: #64748b; }
+        
+        /* Layout */
+        .main-layout { display: grid; grid-template-columns: 1fr 1.8fr; gap: 25px; }
+        .card { background: var(--card); padding: 25px; border-radius: 16px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
+
+        input, select { 
+            width: 100%; padding: 12px; border: 1px solid #e2e8f0; 
+            border-radius: 8px; font-size: 14px; margin-top: 5px; outline: none;
+        }
+        input:focus { border-color: var(--primary); }
+
+        .btn {
+            padding: 12px 20px; border: none; border-radius: 8px; cursor: pointer;
+            font-weight: 600; display: inline-flex; align-items: center; gap: 8px;
+            transition: 0.3s;
+        }
+        .btn-add { background: var(--primary); color: white; width: 100%; justify-content: center; }
+        .btn-pdf { background: var(--danger); color: white; }
+        .btn-reset { background: #94a3b8; color: white; }
+        .btn:hover { opacity: 0.9; transform: translateY(-1px); }
+
+        /* Table */
+        .table-responsive { overflow-x: auto; margin-top: 15px; max-height: 500px; }
+        table { width: 100%; border-collapse: collapse; min-width: 500px; }
+        th { text-align: left; padding: 12px; border-bottom: 2px solid #f1f5f9; color: #64748b; font-size: 13px; }
+        td { padding: 14px 12px; border-bottom: 1px solid #f1f5f9; font-size: 14px; }
+
+        .amt-in { color: var(--success); font-weight: 700; }
+        .amt-out { color: var(--danger); font-weight: 700; }
+        .del-btn { color: #cbd5e1; cursor: pointer; }
+        .del-btn:hover { color: var(--danger); }
+
+        @media (max-width: 900px) {
+            .main-layout { grid-template-columns: 1fr; }
+            .filter-bar { flex-direction: column; align-items: stretch; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <!-- Header with Customizable Title -->
+        <header class="header-section">
+            <div class="app-title-container">
+                <h1 id="display-title" class="app-title">Expense Tracker</h1>
+                <i class="fas fa-pen-to-square edit-btn" onclick="editAppTitle()" title="Edit Title"></i>
+            </div>
+            <p style="font-size: 12px; color: var(--success); margin-top: 5px;">
+                <i class="fas fa-shield-halved"></i> 256-bit AES Local Encryption Active
+            </p>
+        </header>
+
+        <!-- Stats -->
+        <div class="stats-grid">
+            <div class="stat-card balance">
+                <div><small>Total Balance</small><div class="stat-val" id="val-bal">₹0.00</div></div>
+                <i class="fas fa-indian-rupee-sign fa-2xl"></i>
+            </div>
+            <div class="stat-card">
+                <div><small style="color:var(--success)">Total Income</small><div class="stat-val amt-in" id="val-inc">₹0.00</div></div>
+                <i class="fas fa-arrow-trend-up fa-2xl" style="color:var(--success)"></i>
+            </div>
+            <div class="stat-card">
+                <div><small style="color:var(--danger)">Total Expense</small><div class="stat-val amt-out" id="val-exp">₹0.00</div></div>
+                <i class="fas fa-arrow-trend-down fa-2xl" style="color:var(--danger)"></i>
+            </div>
+        </div>
+
+        <!-- Filters -->
+        <div class="filter-bar">
+            <div class="filter-group">
+                <label>From Date</label>
+                <input type="date" id="f-date">
+            </div>
+            <div class="filter-group">
+                <label>To Date</label>
+                <input type="date" id="t-date">
+            </div>
+            <button class="btn btn-add" style="width: auto;" onclick="renderApp()">Apply Filter</button>
+            <button class="btn btn-reset" onclick="resetFilters()">Reset</button>
+            <button class="btn btn-pdf" onclick="exportToPDF()"><i class="fas fa-file-pdf"></i> Export PDF</button>
+        </div>
+
+        <div class="main-layout">
+            <!-- Form -->
+            <div class="left-col">
+                <div class="card">
+                    <h3 style="margin-bottom: 20px;">New Transaction</h3>
+                    <form id="tx-form">
+                        <div style="margin-bottom: 15px;">
+                            <label>Description</label>
+                            <input type="text" id="tx-desc" placeholder="Salary, Rent, Dinner..." required>
+                        </div>
+                        <div style="margin-bottom: 15px;">
+                            <label>Amount (Use - for Expense)</label>
+                            <input type="number" id="tx-amt" placeholder="₹ -500" step="0.01" required>
+                        </div>
+                        <div style="margin-bottom: 15px;">
+                            <label>Category</label>
+                            <select id="tx-cat">
+                                <option value="Salary">Salary / Bonus</option>
+                                <option value="Food">Food & Dining</option>
+                                <option value="Bills">Rent & Utilities</option>
+                                <option value="Transport">Travel / Fuel</option>
+                                <option value="Shopping">Shopping</option>
+                                <option value="Medical">Medical</option>
+                                <option value="Other">Other</option>
+                            </select>
+                        </div>
+                        <div style="margin-bottom: 20px;">
+                            <label>Date</label>
+                            <input type="date" id="tx-date" required>
+                        </div>
+                        <button type="submit" class="btn btn-add">Save Securely</button>
+                    </form>
+                </div>
+                <div class="card" style="margin-top: 20px;">
+                    <canvas id="chartArea" height="250"></canvas>
+                </div>
+            </div>
+
+            <!-- History -->
+            <div class="card">
+                <h3>Transaction History</h3>
+                <div class="table-responsive">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Description</th>
+                                <th>Category</th>
+                                <th>Amount</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody id="tx-history"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const CRYPTO_KEY = "ENCRYPT_USER_DATA_999";
+        let appData = {
+            title: "My Expense Tracker",
+            history: []
+        };
+        let myChart = null;
+
+        // Start App
+        window.onload = () => {
+            document.getElementById('tx-date').valueAsDate = new Date();
+            loadEncryptedData();
+            renderApp();
+        };
+
+        // Storage & Encryption
+        function saveEncryptedData() {
+            const cipher = CryptoJS.AES.encrypt(JSON.stringify(appData), CRYPTO_KEY).toString();
+            localStorage.setItem('_secure_ledger', cipher);
+        }
+
+        function loadEncryptedData() {
+            const cipher = localStorage.getItem('_secure_ledger');
+            if (cipher) {
+                try {
+                    const bytes = CryptoJS.AES.decrypt(cipher, CRYPTO_KEY);
+                    appData = JSON.parse(bytes.toString(CryptoJS.enc.Utf8));
+                } catch (e) { console.error("Decryption failed"); }
+            }
+        }
+
+        // Edit Branding
+        async function editAppTitle() {
+            const { value: newTitle } = await Swal.fire({
+                title: 'Customize App Title',
+                input: 'text',
+                inputValue: appData.title,
+                showCancelButton: true,
+                inputValidator: (value) => { if (!value) return 'Title cannot be empty!' }
+            });
+            if (newTitle) {
+                appData.title = newTitle;
+                saveEncryptedData();
+                renderApp();
+            }
+        }
+
+        // Handle Form
+        document.getElementById('tx-form').onsubmit = (e) => {
+            e.preventDefault();
+            const tx = {
+                id: Date.now(),
+                desc: document.getElementById('tx-desc').value,
+                amt: parseFloat(document.getElementById('tx-amt').value),
+                cat: document.getElementById('tx-cat').value,
+                date: document.getElementById('tx-date').value
+            };
+            appData.history.push(tx);
+            saveEncryptedData();
+            renderApp();
+            e.target.reset();
+            document.getElementById('tx-date').valueAsDate = new Date();
+            Swal.fire({ icon: 'success', title: 'Transaction Saved', showConfirmButton: false, timer: 1000 });
+        };
+
+        function deleteTx(id) {
+            appData.history = appData.history.filter(t => t.id !== id);
+            saveEncryptedData();
+            renderApp();
+        }
+
+        function resetFilters() {
+            document.getElementById('f-date').value = '';
+            document.getElementById('t-date').value = '';
+            renderApp();
+        }
+
+        // Render UI
+        function renderApp() {
+            document.getElementById('display-title').innerText = appData.title;
+            const historyBody = document.getElementById('tx-history');
+            const fDate = document.getElementById('f-date').value;
+            const tDate = document.getElementById('t-date').value;
+            
+            historyBody.innerHTML = '';
+            let filtered = [...appData.history];
+
+            if (fDate) filtered = filtered.filter(t => t.date >= fDate);
+            if (tDate) filtered = filtered.filter(t => t.date <= tDate);
+            filtered.sort((a,b) => new Date(b.date) - new Date(a.date));
+
+            let inc = 0, exp = 0;
+            filtered.forEach(t => {
+                const isExp = t.amt < 0;
+                if (isExp) exp += Math.abs(t.amt); else inc += t.amt;
+
+                historyBody.innerHTML += `
+                    <tr>
+                        <td>${new Date(t.date).toLocaleDateString('en-IN')}</td>
+                        <td>${t.desc}</td>
+                        <td><small>${t.cat}</small></td>
+                        <td class="${isExp ? 'amt-out' : 'amt-in'}">
+                            ₹${Math.abs(t.amt).toLocaleString('en-IN')}
+                        </td>
+                        <td><i class="fas fa-trash-alt del-btn" onclick="deleteTx(${t.id})"></i></td>
+                    </tr>
+                `;
+            });
+
+            document.getElementById('val-bal').innerText = `₹${(inc - exp).toLocaleString('en-IN')}`;
+            document.getElementById('val-inc').innerText = `₹${inc.toLocaleString('en-IN')}`;
+            document.getElementById('val-exp').innerText = `₹${exp.toLocaleString('en-IN')}`;
+
+            updateCharts(filtered);
+        }
+
+        function updateCharts(data) {
+            const ctx = document.getElementById('chartArea').getContext('2d');
+            const expenses = data.filter(t => t.amt < 0);
+            const cats = [...new Set(expenses.map(t => t.cat))];
+            const vals = cats.map(c => expenses.filter(t => t.cat === c).reduce((s, t) => s + Math.abs(t.amt), 0));
+
+            if (myChart) myChart.destroy();
+            myChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: cats,
+                    datasets: [{
+                        data: vals,
+                        backgroundColor: ['#1e3a8a', '#16a34a', '#dc2626', '#f59e0b', '#7c3aed', '#db2777'],
+                        borderWidth: 0
+                    }]
+                },
+                options: { responsive: true, maintainAspectRatio: false }
+            });
+        }
+
+        // Export PDF
+        function exportToPDF() {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+            
+            doc.setFontSize(22);
+            doc.setTextColor(30, 58, 138);
+            doc.text(appData.title.toUpperCase(), 14, 20);
+            
+            doc.setFontSize(10);
+            doc.setTextColor(100);
+            doc.text(`Financial Summary | Generated: ${new Date().toLocaleString('en-IN')}`, 14, 28);
+
+            const rows = appData.history.map(t => [t.date, t.desc, t.cat, t.amt]);
+
+            doc.autoTable({
+                startY: 35,
+                head: [['Date', 'Description', 'Category', 'Amount (INR)']],
+                body: rows,
+                headStyles: { fillColor: [30, 58, 138] }
+            });
+
+            doc.save(`${appData.title}_Report.pdf`);
+            Swal.fire('PDF Exported', 'Check your downloads', 'success');
+        }
+    </script>
+</body>
+</html>
